@@ -6,7 +6,9 @@
             "command": "dotnet",
             "type": "process",
             "args": [
-                "build"
+                "build",
+                "-c",
+                "Release"
             ],
             "problemMatcher": "$msCompile",
             "group": {
@@ -20,7 +22,9 @@
             "type": "process",
             "args": [
                 "build",
-                ".\\src\\native\\build.proj"
+                ".\\src\\native\\build.proj",
+                "-c",
+                "Release"
             ],
             "problemMatcher": "$msCompile",
             "group": {
@@ -32,7 +36,9 @@
             "command": "dotnet",
             "type": "process",
             "args": [
-                "test"
+                "test",
+                "-c",
+                "Release"
             ],
             "problemMatcher": "$msCompile",
             "group": {
@@ -45,7 +51,9 @@
             "command": "dotnet",
             "type": "process",
             "args": [
-                "publish"
+                "publish",
+                "-c",
+                "Release"
             ],
             "problemMatcher": "$msCompile",
             "group": {

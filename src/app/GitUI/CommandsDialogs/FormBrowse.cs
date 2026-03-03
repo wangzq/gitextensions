@@ -1691,7 +1691,11 @@ public sealed partial class FormBrowse : GitModuleForm, IBrowseRepo
         _gitStatusMonitor.InvalidateGitWorkingDirectoryStatus();
         _submoduleStatusProvider.Init();
 
-        repoObjectsTree.ClearTrees();
+        // Do NOT call repoObjectsTree.ClearTrees() here — Tree's FillTreeViewNode reconciliation
+        // updates nodes in-place under BeginUpdate/EndUpdate. Clearing first forces all HTREEITEM
+        // handles to be destroyed and recreated, costing 5+ seconds on large repos.
+        // _firstReloadNodesSinceModuleChanged is set via UICommandsChanged so expanded state
+        // is handled correctly on the first reload after a module switch.
 
         // Reset branch colors whenever we open a new repository
         e.GitModule.ResetRemoteColors();

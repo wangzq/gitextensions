@@ -15,6 +15,11 @@ internal abstract class BaseRefTree : BaseRevisionTree
 
     protected readonly RefsFilter _refsFilter;
 
+    // Cached node tree to avoid rebuilding when refs haven't changed.
+    private Nodes? _cachedNodes;
+    private int _cachedRefsCount;
+    private int _cachedRefsHash;
+
     protected BaseRefTree(TreeNode treeNode, IGitUICommandsSource uiCommands, ICheckRefs refsSource, RefsFilter filter)
         : base(treeNode, uiCommands, refsSource)
     {
@@ -24,6 +29,7 @@ internal abstract class BaseRefTree : BaseRevisionTree
     protected override void OnAttached()
     {
         _loadedRefs = null;
+        _cachedNodes = null;
         base.OnAttached();
     }
 
@@ -38,7 +44,33 @@ internal abstract class BaseRefTree : BaseRevisionTree
             token.ThrowIfCancellationRequested();
         }
 
-        return FillTree(_loadedRefs, token);
+        // Skip the expensive FillTree rebuild when the refs list hasn't changed
+        // (common case when switching between worktrees of the same repo or re-activating).
+        int refsHash = ComputeRefsHash(_loadedRefs);
+        if (_cachedNodes is not null
+            && _cachedRefsCount == _loadedRefs.Count
+            && _cachedRefsHash == refsHash)
+        {
+            return _cachedNodes;
+        }
+
+        Nodes nodes = FillTree(_loadedRefs, token);
+        _cachedRefsCount = _loadedRefs.Count;
+        _cachedRefsHash = refsHash;
+        _cachedNodes = nodes;
+        return nodes;
+
+        static int ComputeRefsHash(IReadOnlyList<IGitRef> refs)
+        {
+            HashCode hc = new();
+            foreach (IGitRef r in refs)
+            {
+                hc.Add(r.ObjectId);
+                hc.Add(r.CompleteName);
+            }
+
+            return hc.ToHashCode();
+        }
     }
 
     protected abstract Nodes FillTree(IReadOnlyList<IGitRef> branches, CancellationToken token);

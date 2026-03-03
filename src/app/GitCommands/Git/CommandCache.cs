@@ -61,7 +61,7 @@ public sealed class CommandCache
     /// <param name="cmd">The command to look for.</param>
     /// <param name="output">Stored output bytes of the command, if found.</param>
     /// <param name="error">Stored error bytes of the command, if found.</param>
-    /// <returns><c>true</c> if the command was found, otherwise <c>false</c>.</returns>
+    /// <returns><see langword="true"/> if the command was found, otherwise <see langword="false"/>.</returns>
     public bool TryGet(string? cmd, [NotNullWhen(returnValue: true)] out string? output, [NotNullWhen(returnValue: true)] out string? error)
     {
         // Never cache empty commands
@@ -74,6 +74,18 @@ public sealed class CommandCache
                     (output, error) = item;
                     return true;
                 }
+            }
+
+            // Fall back to the persistent disk cache on a memory miss.
+            if (PersistentCacheStore.TryGetCommandOutput(cmd, out output, out error))
+            {
+                // Promote back into the in-memory MRU so future requests are served without disk I/O.
+                lock (_cacheLock)
+                {
+                    _cache.Add(cmd, (output, error));
+                }
+
+                return true;
             }
         }
 
@@ -102,6 +114,11 @@ public sealed class CommandCache
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
+
+        // Write through to the persistent disk cache asynchronously so that immutable
+        // SHA-keyed results survive across application restarts.
+        _ = System.Threading.Tasks.Task.Run(
+            () => PersistentCacheStore.PutCommandOutput(cmd, output, error));
     }
 
     /// <summary>

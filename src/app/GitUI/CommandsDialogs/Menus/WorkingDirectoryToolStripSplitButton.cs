@@ -203,7 +203,7 @@ internal class WorkingDirectoryToolStripSplitButton : ToolStripSplitButton, ITra
 
         internal void RefreshContent(ToolStripSplitButton button)
         {
-            if (ActiveOrOpenForm is not Form graphicsForm)
+            if (ActiveOrOpenForm is null)
             {
                 // The component is unparented, no point doing anything.
                 return;
@@ -219,33 +219,49 @@ internal class WorkingDirectoryToolStripSplitButton : ToolStripSplitButton, ITra
                 return;
             }
 
-            IList<Repository> recentRepositoryHistory = ThreadHelper.JoinableTaskFactory.Run(
-                () => RepositoryHistoryManager.Locals.AddAsMostRecentAsync(path));
+            // Set button text immediately without blocking the UI thread on history persistence I/O.
+            button.Text = PathUtil.GetDisplayPath(path);
+            button.AutoSize = true;
 
-            List<RecentRepoInfo> pinnedRepos = [];
-            using Graphics graphics = graphicsForm.CreateGraphics();
-            RecentRepoSplitter splitter = new()
+            // Persist to recent history and update the display caption asynchronously
+            // to avoid blocking the UI thread on file I/O.
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
-                MeasureFont = button.Font,
-            };
+                IList<Repository> recentRepositoryHistory = await RepositoryHistoryManager.Locals.AddAsMostRecentAsync(path);
 
-            splitter.SplitRecentRepos(recentRepositoryHistory, pinnedRepos, pinnedRepos);
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-            RecentRepoInfo? ri = pinnedRepos.Find(e => e.Repo.Path.Equals(path, StringComparison.InvariantCultureIgnoreCase));
+                Form? activeForm = ActiveOrOpenForm;
+                if (activeForm is null || activeForm.IsDisposed)
+                {
+                    return;
+                }
 
-            button.Text = PathUtil.GetDisplayPath(ri?.Caption ?? path);
+                List<RecentRepoInfo> pinnedRepos = [];
+                using Graphics graphics = activeForm.CreateGraphics();
+                RecentRepoSplitter splitter = new()
+                {
+                    MeasureFont = button.Font,
+                };
 
-            if (AppSettings.RecentReposComboMinWidth > 0)
-            {
-                button.AutoSize = false;
-                float captionWidth = graphics.MeasureString(button.Text, button.Font).Width;
-                captionWidth = captionWidth + button.DropDownButtonWidth + 5;
-                button.Width = Math.Max(AppSettings.RecentReposComboMinWidth, (int)captionWidth);
-            }
-            else
-            {
-                button.AutoSize = true;
-            }
+                splitter.SplitRecentRepos(recentRepositoryHistory, pinnedRepos, pinnedRepos);
+
+                RecentRepoInfo? ri = pinnedRepos.Find(e => e.Repo.Path.Equals(path, StringComparison.InvariantCultureIgnoreCase));
+
+                button.Text = PathUtil.GetDisplayPath(ri?.Caption ?? path);
+
+                if (AppSettings.RecentReposComboMinWidth > 0)
+                {
+                    button.AutoSize = false;
+                    float captionWidth = graphics.MeasureString(button.Text, button.Font).Width;
+                    captionWidth = captionWidth + button.DropDownButtonWidth + 5;
+                    button.Width = Math.Max(AppSettings.RecentReposComboMinWidth, (int)captionWidth);
+                }
+                else
+                {
+                    button.AutoSize = true;
+                }
+            }).FileAndForget();
         }
     }
 

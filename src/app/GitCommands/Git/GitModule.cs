@@ -3021,10 +3021,31 @@ public sealed partial class GitModule : IGitModule
         const bool noLocks = true;
 
         ArgumentString cmd = Commands.GetRefs(getRef, noLocks, AppSettings.RefsSortBy, AppSettings.RefsSortOrder);
+
+        // Use a stable key that encodes all parameters that affect the git command output.
+        string commandKey = FormattableString.Invariant(
+            $"{(int)getRef}:{(int)AppSettings.RefsSortBy}:{(int)AppSettings.RefsSortOrder}");
+        string commonDir = GitCommonDirectory;
+
+        if (PersistentRefCache.TryGet(commonDir, commandKey, out string? cachedOutput))
+        {
+            return ParseRefs(cachedOutput);
+        }
+
         ExecutionResult result = _gitExecutable.Execute(cmd, throwOnErrorExit: false);
-        return result.ExitedSuccessfully
-            ? ParseRefs(result.StandardOutput)
-            : [];
+
+        if (!result.ExitedSuccessfully)
+        {
+            return [];
+        }
+
+        string standardOutput = result.StandardOutput;
+
+        // Persist asynchronously — a failed write is inconsequential.
+        _ = System.Threading.Tasks.Task.Run(
+            () => PersistentRefCache.Set(commonDir, commandKey, standardOutput));
+
+        return ParseRefs(standardOutput);
     }
 
     public async Task<string[]> GetMergedBranchesAsync(bool includeRemote, bool fullRefname, string? commit, CancellationToken cancellationToken)

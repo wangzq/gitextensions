@@ -228,10 +228,22 @@ internal sealed class SubmoduleStatusProvider : ISubmoduleStatusProvider
 
         localPath = Path.GetDirectoryName(localPath).ToPosixPath();
 
-        foreach (string submodule in submodules)
+        // Resolve all submodule paths up front so the parallel loop below can use them by index.
+        string[] paths = submodules.Select(topProject.GetSubmoduleFullPath).ToArray();
+
+        // Each GetBranchNameSuffix call performs an independent synchronous File.ReadAllText on
+        // the submodule's .git/HEAD file.  Running them in parallel reduces total wall-clock time
+        // from O(n × disk-latency) to O(disk-latency), which matters significantly for repos with
+        // many submodules on a network drive or slow SSD.
+        string[] branchSuffixes = new string[submodules.Length];
+        Parallel.For(0, submodules.Length, i =>
+            branchSuffixes[i] = GetBranchNameSuffix(paths[i], noBranchText));
+
+        for (int i = 0; i < submodules.Length; i++)
         {
-            string path = topProject.GetSubmoduleFullPath(submodule);
-            string name = submodule + GetBranchNameSuffix(path, noBranchText);
+            string submodule = submodules[i];
+            string path = paths[i];
+            string name = submodule + branchSuffixes[i];
 
             bool bold = false;
             if (submodule == localPath)

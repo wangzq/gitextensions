@@ -16,6 +16,16 @@ public sealed partial class FormGitCommandLog : GitExtensionsForm
         InitializeComplete();
         ActiveControl = LogItems;
 
+        // Add a 'Clear disk cache' item to the command-cache context menu.
+        ToolStripMenuItem clearDiskCacheItem = new()
+        {
+            Image = Properties.Images.ClearLog,
+            Name = "tsmiClearDiskCache",
+            Text = "Clear &disk cache",
+        };
+        clearDiskCacheItem.Click += tsmiClearDiskCache_Click;
+        cmsCache.Items.Add(clearDiskCacheItem);
+
         LogItems.DisplayMember = nameof(CommandLogEntry.ColumnLine);
 
         Font font = new(FontFamily.GenericMonospace, 9);
@@ -198,6 +208,13 @@ public sealed partial class FormGitCommandLog : GitExtensionsForm
 
     private void tsmiClearCache_Click(object sender, EventArgs e)
     {
+        GitModule.GitCommandCache.Clear();
+        RefreshCommandCacheItems();
+    }
+
+    private void tsmiClearDiskCache_Click(object sender, EventArgs e)
+    {
+        PersistentCacheStore.Clear();
         GitModule.GitCommandCache.Clear();
         RefreshCommandCacheItems();
     }
